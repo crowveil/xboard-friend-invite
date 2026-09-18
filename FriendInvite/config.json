@@ -1,0 +1,16 @@
+{
+  "name": "好友邀请",
+  "code": "friend_invite",
+  "version": "0.1.0",
+  "type": "feature",
+  "description": "选套餐与使用期限，生成好友注册邀请；支持专属 Telegram 机器人。管理地址见配置窗口。",
+  "author": "crowveil",
+  "config": {
+    "console_open": {
+      "type": "boolean",
+      "default": false,
+      "label": "开放管理控制台（60 分钟，地址见下方）",
+      "description": "启用插件后自动显示完整管理地址。开放并保存后复制地址访问，仍需 XBoard 管理员登录。关闭网页管理不会关闭 TG 或邀请注册。"
+    }
+  }
+}

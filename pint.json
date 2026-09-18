@@ -1,0 +1,4 @@
+{
+  "preset": "psr12",
+  "exclude": ["vendor", "tests/upstream", "tests/runtime", "dist"]
+}

@@ -1,0 +1,11 @@
+/vendor/
+/node_modules/
+/dist/
+/tests/runtime/
+/.phpunit.cache/
+__pycache__/
+.env*
+*.key
+*.pem
+credentials*
+secrets*

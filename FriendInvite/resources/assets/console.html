@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>好友邀请 · XBoard</title>
+    <link rel="stylesheet" href="console.css?v=1d595d40d05e" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow" id="version">XBOARD · FRIEND INVITE</p>
+          <h1>好友邀请</h1>
+          <p>选好套餐，把一份邀请发给朋友。</p>
+        </div>
+        <div id="session-actions" hidden>
+          <button id="renew">延长至 60 分钟</button
+          ><button id="close" class="danger">关闭控制台</button>
+        </div>
+      </header>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <section id="landing" class="card">
+        <h2 id="access-title">检查管理权限</h2>
+        <p id="access-help">请先在同一域名登录 XBoard 管理后台。</p>
+        <p id="summary"></p>
+        <button id="check" class="primary">检查并进入</button>
+      </section>
+      <div id="workspace" hidden>
+        <div class="bar"><span id="expires"></span><span id="dirty" hidden>设置尚未保存</span></div>
+        <nav aria-label="控制台页面">
+          <button data-tab="invites" aria-current="page">邀请管理</button
+          ><button data-tab="settings">设置</button><button data-tab="telegram">Telegram</button
+          ><button data-tab="debug">诊断</button>
+        </nav>
+        <section id="tab-invites" class="card">
+          <h2>创建邀请</h2>
+          <p>
+            仅供新账号领取一次；使用期限从注册成功时开始计算。额度、权限组、限速和设备数取自领取时的套餐。
+          </p>
+          <form id="create-form">
+            <div class="grid">
+              <label>赠送套餐<select id="plan" required></select></label
+              ><label>使用期限<select id="duration" required></select></label
+              ><label
+                >朋友备注（选填）<input id="note" maxlength="120" placeholder="例如：小林" /></label
+              ><label
+                >邀请有效期（天）<input
+                  id="invite-days"
+                  type="number"
+                  min="1"
+                  max="90"
+                  value="7"
+                  required
+              /></label>
+            </div>
+            <details>
+              <summary>限定领取邮箱（可选）</summary>
+              <label
+                >邮箱<input
+                  id="email"
+                  type="email"
+                  maxlength="254"
+                  placeholder="需要 XBoard 已开启邮箱验证"
+              /></label>
+            </details>
+            <p class="hint">永久表示无到期时间，沿用 XBoard 永久套餐不自动重置流量的行为。</p>
+            <button class="primary" type="submit">生成邀请链接</button>
+          </form>
+          <div id="result" class="result" hidden>
+            <label>发给朋友的链接<textarea id="result-url" rows="3" readonly></textarea></label
+            ><button id="copy-result">复制链接</button><span id="result-label"></span>
+          </div>
+          <hr />
+          <div class="section-head">
+            <h2>最近邀请</h2>
+            <button id="refresh">刷新</button>
+          </div>
+          <div id="invitations" class="invite-list"></div>
+          <div class="pagination">
+            <button id="prev">上一页</button><span id="page"></span
+            ><button id="next">下一页</button>
+          </div>
+        </section>
+        <section id="tab-settings" class="card" hidden>
+          <h2>邀请设置</h2>
+          <p>启用插件后，邮箱注册仅接受本插件发出的邀请。现有账号照常登录。</p>
+          <div id="readiness" class="hint"></div>
+          <form id="settings-form">
+            <label class="check"><input id="accepting" type="checkbox" />开放好友邀请注册</label>
+            <fieldset>
+              <legend>允许赠送的 XBoard 套餐</legend>
+              <div id="plans" class="choices"></div>
+            </fieldset>
+            <label
+              >默认邀请有效期（天）<input
+                id="default-days"
+                type="number"
+                min="1"
+                max="90"
+                required /></label
+            ><label
+              >注册链接模板<input id="register-url" type="text" maxlength="1000" required
+            /></label>
+            <p class="hint">
+              自动使用站点地址，保留
+              {code}。自定义主题可改成其支持的邀请码链接；朋友仍在原有注册页面填写邮箱和密码。
+            </p>
+            <button class="primary" type="submit">保存设置</button>
+          </form>
+        </section>
+        <section id="tab-telegram" class="card" hidden>
+          <h2>专属 Telegram 机器人</h2>
+          <p>
+            向 @BotFather 创建一个机器人，将 Token 填在下面。首次连接需要当前站点具备公网
+            HTTPS，服务器能够访问 Telegram。
+          </p>
+          <p id="bot-status"></p>
+          <button id="bot-refresh">刷新连接状态</button>
+          <form id="bot-form">
+            <label
+              >Bot Token<input
+                id="bot-token"
+                type="password"
+                autocomplete="new-password"
+                maxlength="240"
+                placeholder="只在连接时填写，不回显"
+                required /></label
+            ><button type="submit" class="primary">连接机器人</button>
+          </form>
+          <div class="actions">
+            <button id="pair">生成管理员绑定指令</button><button id="unpair">解除管理员绑定</button
+            ><button id="disconnect" class="danger">断开机器人</button>
+          </div>
+          <div id="pair-result" hidden>
+            <label
+              >在你与机器人私聊中发送（10 分钟有效）<textarea
+                id="pair-command"
+                readonly
+                rows="2"
+              ></textarea></label
+            ><button id="copy-pair">复制指令</button>
+          </div>
+          <p class="hint">
+            绑定完成后发送 /new，按按钮选择套餐 → 期限 → 确认生成。/new 备注 可记下朋友名字，/list
+            查看和撤销最近邀请。仅绑定账号的私聊可操作；关闭此控制台不会停止机器人。
+          </p>
+        </section>
+        <section id="tab-debug" class="card" hidden>
+          <h2>调试与诊断</h2>
+          <p>调试自动在 60 分钟后关闭。导出内容不含邀请链接、邮箱、机器人 Token 或绑定指令。</p>
+          <p id="debug-status"></p>
+          <div class="actions">
+            <button id="debug-on">开启调试 60 分钟</button><button id="debug-off">关闭调试</button
+            ><button id="export">导出脱敏诊断</button>
+          </div>
+          <pre id="diagnostics"></pre>
+        </section>
+      </div>
+      <footer>好友邀请 · 独立 XBoard 插件 <span id="footer-version"></span></footer>
+    </main>
+    <script src="console.js?v=485ce19199ca"></script>
+  </body>
+</html>
