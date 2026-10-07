@@ -24,8 +24,8 @@ final class TelegramController
             Bot::receive($request->json()->all());
             Outbox::flush(3);
             return response()->json(['ok' => true]);
-        } catch (\Throwable) {
-            Diagnostics::record('TELEGRAM_UPDATE_FAILED', [], true);
+        } catch (\Throwable $error) {
+            Diagnostics::failure('TELEGRAM_UPDATE_FAILED', $error);
             return response()->json(['ok' => false], 503);
         }
     }

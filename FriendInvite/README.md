@@ -20,7 +20,7 @@
 
 ## Telegram
 
-向 @BotFather 创建独立机器人，在后台“Telegram”填入 Token 连接，再生成管理员绑定指令并发给机器人私聊。之后用 `/new` 选择套餐和期限，`/new 朋友备注` 附带备注，`/list` 查看及撤销最近邀请。Webhook 需要公网 HTTPS 和服务器可访问 Telegram。
+向 @BotFather 创建独立机器人，在后台“Telegram”填入 Token 连接，再生成管理员绑定指令并发给机器人私聊。之后用 `/new` 按提示输入必填备注，再选择套餐和期限；`/cancel` 取消当前草稿，`/list` 查看及撤销最近邀请。保留 `/new 朋友备注` 快捷输入。Webhook 需要公网 HTTPS 和服务器可访问 Telegram。
 
 只有绑定的账号可以管理；不要复用 XBoard 原有机器人的 Token。无需另外部署服务。
 
@@ -33,3 +33,29 @@
 详细兼容范围、运行说明、测试方法和源码位于发行包的源码 ZIP 中。
 
 MIT · crowveil
+
+## 0.1.1 运维与恢复
+
+上传升级后重启 Web / Octane 与后台任务的常驻 PHP 进程，刷新控制台。不要卸载再重装；禁用插件会按既有规则撤销待领取邀请。
+
+「诊断」页提供部署自检、脱敏导出和失败消息管理。管理异常显示诊断编号及位置，文件日志在 `storage/app/friend-invite/diagnostics.jsonl`，单文件约 1 MiB 后轮转，保留上一份；文件不可写时使用 PHP 错误日志兜底。无须发送原始 Token 或完整邀请链接。
+
+在 XBoard 应用目录执行：
+
+```bash
+php artisan friend-invite:manage selfcheck
+php artisan friend-invite:manage repair-assets
+php artisan friend-invite:manage diagnose
+```
+
+启用启动时仅在公开目录缺失或上次发布未完成时自动恢复；目录内个别文件丢失可执行显式修复。自检反映执行命令的用户权限，CLI 成功不等于 Web PHP 用户有权限。运行接口检查不能替代进程重启。
+
+TG 操作失败后刷新连接状态，点击“恢复连接操作”。恢复使用已保存的操作及 Webhook 密钥；远端被其他服务接管时停止。永久失效的 Token 可选择“清除本地连接”，此操作不会删除远端 Webhook，须另行核对 Telegram 设置。
+
+关闭控制台时可保存设置并关闭、放弃并关闭或继续编辑；输入中的 Token 不会被自动用于连接。失败消息只能重试已停止自动重试且仍属于当前有效绑定的消息，可能产生重复通知，不会再次开通套餐。
+
+管理锁与日志目录 `storage/app/friend-invite` 必须由 Web PHP 用户可写。多个 Web 副本须共享此目录并支持跨进程 flock；数据库、APP_KEY 和插件代码仍需持久化。
+
+## 用户姓名备注
+
+邀请备注在领取成功时写入 XBoard 用户管理的备注。网页邀请和 TG `/new 姓名` 共用此规则。空备注跳过，有原备注时追加；已领取用户不自动回填，后续手动修改不被覆盖。

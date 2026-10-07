@@ -4,7 +4,7 @@ namespace Plugin\FriendInvite\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Plugin\FriendInvite\Services\{ConsoleAccess, Diagnostics, Duration, Failure, Invitations, NativeConfig, Settings, Store, Telegram};
+use Plugin\FriendInvite\Services\{ConsoleAccess, Diagnostics, Duration, Failure, Invitations, NativeConfig, Settings, Telegram};
 
 final class AdminController
 {
@@ -18,6 +18,7 @@ final class AdminController
             if (!Settings::enabled()) {
                 throw new Failure('插件未启用', 403);
             }
+            \Plugin\FriendInvite\Services\Runtime::requireSupported();
             $data = $gated ? ConsoleAccess::withOpen($fn) : $fn();
             return response()->json($data)->header('Cache-Control', 'private, no-store');
         } catch (Failure $e) {
@@ -25,8 +26,8 @@ final class AdminController
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
-            Diagnostics::record('ADMIN_OPERATION_FAILED', ['error_type' => get_class($e)], true);
-            return response()->json(['error' => '操作失败，请导出脱敏诊断检查'], 500)->header('Cache-Control', 'no-store');
+            $diagnostic = Diagnostics::failure('ADMIN_OPERATION_FAILED', $e);
+            return response()->json(['error' => '管理操作失败，请按诊断编号检查日志'] + $diagnostic, 500)->header('Cache-Control', 'no-store');
         }
     }
 
@@ -44,7 +45,7 @@ final class AdminController
                 $c['register_url'] = $root.'/#/register?code={code}';
             }
             $page = max(1, min(10000, (int) $request->input('page', 1)));
-            return ['config' => $c, 'access' => ConsoleAccess::status(), 'durations' => Duration::OPTIONS, 'plans' => Settings::plans(),
+            return ['config' => $c, 'revision' => Settings::revision(), 'access' => ConsoleAccess::status(), 'durations' => Duration::OPTIONS, 'plans' => Settings::plans(),
                 'readiness' => Settings::readiness(), 'telegram' => Telegram::summary(), 'page' => $page, 'total' => Invitations::table()->count(),
                 'invitations' => Invitations::table()->orderByDesc('created_at')->orderByDesc('id')->skip(($page - 1) * 20)->limit(20)->get()->map(fn ($r) => Invitations::present($r))->all()];
         });
@@ -53,9 +54,9 @@ final class AdminController
     public function save(Request $request)
     {
         return $this->action(function () use ($request) {
-            $data = $request->validate(['accepting' => 'required|boolean', 'plan_ids' => 'present|array', 'plan_ids.*' => 'integer|min:1', 'invite_days' => 'required|integer|min:1|max:90', 'register_url' => 'required|string|max:1000']);
-            Settings::save($data);
-            return ['ok' => true];
+            $data = $request->validate(['accepting' => 'required|boolean', 'plan_ids' => 'present|array', 'plan_ids.*' => 'integer|min:1', 'invite_days' => 'required|integer|min:1|max:90', 'register_url' => 'required|string|max:1000', 'revision' => 'required|string|size:64']);
+            Settings::save($data, $data['revision']);
+            return ['ok' => true, 'revision' => Settings::revision()];
         });
     }
 
@@ -79,7 +80,7 @@ final class AdminController
     public function renew()
     {
         return $this->action(function () {
-            ConsoleAccess::change(true, true);
+            ConsoleAccess::setOpen(true, true);
             return ['access' => ConsoleAccess::status()];
         });
     }
@@ -95,13 +96,34 @@ final class AdminController
     {
         return $this->action(function () use ($request) {
             $v = $request->validate(['enabled' => 'required|boolean']);
-            $c = Settings::get();
-            $c['debug_until'] = $v['enabled'] ? now()->timestamp + 3600 : 0;
-            Store::put('settings', $c);
+            $c = Settings::debug($v['enabled']);
             return ['ok' => true, 'until' => $c['debug_until']];
         });
     }
 
+    public function preflight()
+    {
+        return $this->action(fn () => \Plugin\FriendInvite\Services\Runtime::check());
+    }
+    public function recover()
+    {
+        return $this->action(fn () => ['telegram' => Telegram::recover()]);
+    }
+    public function forget(Request $request)
+    {
+        return $this->action(function () use ($request) {
+            $request->validate(['confirm' => 'required|accepted']);
+            Telegram::forget();
+            return ['ok' => true];
+        });
+    }
+    public function messages(Request $request)
+    {
+        return $this->action(function () use ($request) {
+            $v = $request->validate(['action' => 'required|in:list,retry,discard', 'id' => 'required_unless:action,list|string|size:64']);
+            return \Plugin\FriendInvite\Services\Outbox::manage($v['action'], $v['id'] ?? null);
+        });
+    }
     public function export()
     {
         return $this->action(fn () => Diagnostics::report());

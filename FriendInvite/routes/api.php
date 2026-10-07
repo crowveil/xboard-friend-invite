@@ -14,6 +14,10 @@ Route::prefix('api/v1/friend-invite/admin')->middleware('admin')->group(function
     Route::post('renew', [AdminController::class, 'renew']);
     Route::post('close', [AdminController::class, 'close']);
     Route::post('debug', [AdminController::class, 'debug']);
+    Route::get('preflight', [AdminController::class, 'preflight']);
+    Route::post('messages', [AdminController::class, 'messages']);
+    Route::post('telegram/forget', [AdminController::class, 'forget']);
+    Route::post('telegram/recover', [AdminController::class, 'recover']);
     Route::get('export', [AdminController::class, 'export']);
     Route::post('telegram/connect', [AdminController::class, 'connect']);
     Route::post('telegram/pair', [AdminController::class, 'pair']);

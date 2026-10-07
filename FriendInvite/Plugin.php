@@ -4,21 +4,27 @@ namespace Plugin\FriendInvite;
 
 use App\Services\Plugin\AbstractPlugin;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\File;
-use Plugin\FriendInvite\Services\{ConsoleAccess, Invitations, Maintenance, Settings};
+use Plugin\FriendInvite\Services\{Assets, ConsoleAccess, Invitations, Maintenance, Settings};
 
 final class Plugin extends AbstractPlugin
 {
+    public function boot(): void
+    {
+        if (Settings::enabled()) {
+            Assets::publish();
+        }
+    }
+
     public function cleanup(): void
     {
         ConsoleAccess::close();
         Invitations::revokePending();
+        Assets::remove();
     }
 
     public function update(string $oldVersion, string $newVersion): void
     {
-        File::ensureDirectoryExists(public_path('plugins/'.Settings::CODE));
-        File::copyDirectory(__DIR__.'/resources/assets', public_path('plugins/'.Settings::CODE));
+        Assets::publish(true);
     }
 
     public function schedule(Schedule $schedule): void

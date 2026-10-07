@@ -5,7 +5,7 @@
   "author": "crowveil",
   "license": "MIT",
   "scripts": {
-    "test": "node tests/ui_dom.cjs",
+    "test": "node tests/ui_dom.cjs && node tests/ui_recovery.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:browser": "node tests/ui_browser.cjs"

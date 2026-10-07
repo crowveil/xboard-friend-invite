@@ -37,6 +37,9 @@ final class Telegram
             throw new Failure('TG Webhook 需要可公开访问的 HTTPS 地址，请先配置反向代理 HTTPS');
         }
         $old = Store::read('bot');
+        if (!empty($old['pending'])) {
+            throw new Failure('机器人操作等待恢复，请点击恢复连接操作', 409);
+        }
         $same = !empty($old['token']) && hash_equals($old['token'], $token);
         if (!empty($old['connected']) && !$same) {
             throw new Failure('请先断开当前机器人，再连接另一只机器人');
@@ -50,11 +53,44 @@ final class Telegram
         if (!empty($remote['url']) && $remote['url'] !== $url) {
             throw new Failure('此机器人已连接其他 Webhook；请使用新机器人或先在原服务解除连接');
         }
-        $state = $same ? $old : ['epoch' => bin2hex(random_bytes(16)), 'owner_id' => null, 'admin_id' => null];
-        $state = array_replace($state, ['token' => $token, 'secret' => bin2hex(random_bytes(32)), 'username' => $me['username'], 'webhook_url' => $url, 'connected' => true]);
-        self::call($token, 'setWebhook', ['url' => $url, 'secret_token' => $state['secret'], 'allowed_updates' => ['message', 'callback_query'], 'drop_pending_updates' => false]);
-        Store::put('bot', $state);
-        Diagnostics::record('TELEGRAM_CONNECTED');
+        Store::locked('bot', function ($current) use ($old, $same, $token, $me, $url) {
+            if ($current !== $old) {
+                throw new Failure('机器人状态已变化，请刷新后重试', 409);
+            }
+            $state = $same ? $old : ['epoch' => bin2hex(random_bytes(16)), 'owner_id' => null, 'admin_id' => null];
+            $state = array_replace($state, ['token' => $token, 'secret' => bin2hex(random_bytes(32)), 'username' => $me['username'], 'webhook_url' => $url, 'connected' => false, 'pending' => 'connect']);
+            Store::put('bot', $state);
+        });
+        return self::recover();
+    }
+
+    /** Reapply the saved operation with the same secret; no new pairing is created. */
+    public static function recover(): array
+    {
+        Store::locked('bot', function ($s) {
+            $pending = $s['pending'] ?? null;
+            if (!$pending) {
+                return;
+            }
+            $remote = self::call($s['token'], 'getWebhookInfo');
+            if (!empty($remote['url']) && $remote['url'] !== $s['webhook_url']) {
+                throw new Failure('机器人 Webhook 已由其他服务接管，请先核对远端设置', 409);
+            }
+            if ($pending === 'connect') {
+                self::call($s['token'], 'setWebhook', ['url' => $s['webhook_url'], 'secret_token' => $s['secret'], 'allowed_updates' => ['message', 'callback_query'], 'drop_pending_updates' => false]);
+                $s['connected'] = true;
+                unset($s['pending']);
+                Store::put('bot', $s);
+                Diagnostics::record('TELEGRAM_CONNECTED');
+            } elseif ($pending === 'disconnect') {
+                self::call($s['token'], 'deleteWebhook', ['drop_pending_updates' => false]);
+                Store::put('bot', []);
+                Store::put('pair', []);
+                Diagnostics::record('TELEGRAM_DISCONNECTED');
+            } else {
+                throw new Failure('机器人恢复状态无效，请检查诊断', 409);
+            }
+        });
         return self::summary();
     }
 
@@ -62,39 +98,61 @@ final class Telegram
     {
         $s = Store::read('bot');
         return ['connected' => (bool) ($s['connected'] ?? false), 'username' => $s['username'] ?? null,
-            'owner_id' => $s['owner_id'] ?? null, 'webhook_url' => $s['webhook_url'] ?? null];
+            'pending' => $s['pending'] ?? null, 'owner_id' => $s['owner_id'] ?? null, 'webhook_url' => $s['webhook_url'] ?? null];
     }
 
     public static function pair(int $adminId): string
     {
-        $s = Store::read('bot');
-        if (empty($s['connected'])) {
-            throw new Failure('请先连接机器人');
-        }
-        if (!empty($s['owner_id'])) {
-            throw new Failure('机器人已绑定，请先解除绑定');
-        }
-        $code = bin2hex(random_bytes(16));
-        Store::put('pair', ['hash' => hash('sha256', $code), 'admin_id' => $adminId, 'expires_at' => now()->timestamp + 600, 'epoch' => $s['epoch']]);
-        return '/bind '.$code;
+        return Store::locked('bot', function ($s) use ($adminId) {
+            if (empty($s['connected'])) {
+                throw new Failure('请先连接机器人');
+            }
+            if (!empty($s['owner_id'])) {
+                throw new Failure('机器人已绑定，请先解除绑定');
+            }
+            $code = bin2hex(random_bytes(16));
+            Store::put('pair', ['hash' => hash('sha256', $code), 'admin_id' => $adminId, 'expires_at' => now()->timestamp + 600, 'epoch' => $s['epoch']]);
+            return '/bind '.$code;
+        });
     }
 
     public static function unpair(): void
     {
         Store::locked('bot', function ($s) {
+            if (!empty($s['pending'])) {
+                throw new Failure('请先恢复待确认的机器人操作', 409);
+            }
+            $s['epoch'] = bin2hex(random_bytes(16));
             $s['owner_id'] = $s['admin_id'] = null;
             Store::put('bot', $s);
             Store::put('pair', []);
         });
     }
 
+    public static function forget(): void
+    {
+        Store::locked('bot', function ($s) {
+            if (empty($s['pending'])) {
+                throw new Failure('仅待恢复操作可清除本地连接，请优先正常断开', 409);
+            }
+            Store::put('bot', []);
+            Store::put('pair', []);
+            Diagnostics::record('TELEGRAM_LOCAL_CONNECTION_CLEARED', [], true);
+        });
+    }
     public static function disconnect(): void
     {
-        $s = Store::read('bot');
-        if (!empty($s['token'])) {
-            self::call($s['token'], 'deleteWebhook', ['drop_pending_updates' => false]);
-        }
-        Store::put('bot', []);
-        Store::put('pair', []);
+        Store::locked('bot', function ($s) {
+            if (empty($s['token'])) {
+                return;
+            }
+            if (!empty($s['pending']) && $s['pending'] !== 'disconnect') {
+                throw new Failure('请先恢复待确认的机器人连接', 409);
+            }
+            $s['connected'] = false;
+            $s['pending'] = 'disconnect';
+            Store::put('bot', $s);
+        });
+        self::recover();
     }
 }

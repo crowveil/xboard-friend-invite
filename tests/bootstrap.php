@@ -65,6 +65,7 @@ abstract class InviteTestCase extends PHPUnit\Framework\TestCase
         $schema->create('users', function ($t) {
             $t->increments('id');
             $t->string('email')->unique();
+            $t->text('remarks')->nullable();
             $t->string('password')->nullable();
             $t->string('uuid')->nullable();
             $t->string('token')->nullable();

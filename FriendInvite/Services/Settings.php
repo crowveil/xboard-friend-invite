@@ -39,7 +39,29 @@ final class Settings
         return $issues;
     }
 
-    public static function save(array $input): array
+    public static function revision(?array $config = null): string
+    {
+        return hash('sha256', json_encode($config ?? self::get(), JSON_THROW_ON_ERROR));
+    }
+    public static function debug(bool $enabled): array
+    {
+        return Store::locked('settings', function () use ($enabled) {
+            $c = self::get();
+            $c['debug_until'] = $enabled ? now()->timestamp + 3600 : 0;
+            Store::put('settings', $c);
+            return $c;
+        });
+    }
+    public static function save(array $input, ?string $revision = null): array
+    {
+        return Store::locked('settings', function () use ($input, $revision) {
+            if ($revision !== null && !hash_equals(self::revision(), $revision)) {
+                throw new Failure('设置已被其他操作修改，请重新加载后保存', 409);
+            }
+            return self::writeSettings($input);
+        });
+    }
+    private static function writeSettings(array $input): array
     {
         $c = self::get();
         $ids = array_values(array_unique(array_map('intval', $input['plan_ids'] ?? [])));

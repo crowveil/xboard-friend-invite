@@ -12,6 +12,7 @@ const config = {
   debug_until: 0,
 };
 const state = {
+  revision: 'a'.repeat(64),
   config,
   access: { open: true, expires_at: 2000000000 },
   durations: {
@@ -63,11 +64,15 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
     if (action === 'session')
       data = {
         access: { open: !closed, expires_at: 2000000000 },
-        version: '0.1.0',
+        version: '0.1.1',
         summary: { invitations: 0, accepting: true, telegram_connected: false },
       };
     if (action === 'state') data = structuredClone(state);
-    if (action === 'settings') Object.assign(config, body);
+    if (action === 'settings') {
+      assert.equal(body.revision, state.revision);
+      Object.assign(config, body);
+      data.revision = state.revision;
+    }
     if (action === 'create') {
       if (failCreate) {
         failCreate = false;

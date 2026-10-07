@@ -87,6 +87,12 @@ class PublishingFlowTests(GitSandbox):
             target = self.source / path.relative_to(original_root)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, target)
+        # First-release scenarios use an explicit fixture, independent of the release being built.
+        (self.source / "RELEASE_BASE").write_text("initial\n")
+        manifest = self.source / "FriendInvite/config.json"
+        metadata = json.loads(manifest.read_text())
+        metadata["version"] = "0.1.0"
+        manifest.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
         self.exists = False
         self.default_branch = "master"
         self.release_state = None
@@ -245,6 +251,26 @@ class PublishingFlowTests(GitSandbox):
         with self.assertRaisesRegex(publish.PublishError, "整合 main"):
             publish.publish()
         self.assertEqual(len(self.pushes), 1)
+
+    def test_patch_release_uses_previous_main_and_retry_preserves_commit(self):
+        base = self.seed()
+        (self.source / "RELEASE_BASE").write_text(base + "\n")
+        manifest = self.source / "FriendInvite/config.json"
+        metadata = json.loads(manifest.read_text())
+        metadata["version"] = "0.1.1"
+        manifest.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
+        with patch("builtins.input", return_value="PUBLISH v0.1.1"), patch.object(publish, "wait_for_tests"), patch.object(publish, "dispatch_release") as dispatch:
+            publish.publish()
+            commit = self.head()
+            self.assertNotEqual(commit, base)
+            self.assertEqual(self.real_git(self.bare, "show", "-s", "--format=%P", commit).stdout.strip(), base)
+            publish.publish()
+            self.assertEqual(self.head(), commit)
+            self.assertEqual(len(self.pushes), 2)
+            dispatch.assert_called_with("0.1.1", commit)
+        (self.source / "README.md").write_text("Unexpected local changes\n")
+        with self.assertRaisesRegex(publish.PublishError, "main 已变化"):
+            publish.publish()
 
     def test_published_version_is_not_overwritten(self):
         self.seed()

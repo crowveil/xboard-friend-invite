@@ -13,6 +13,45 @@ final class RegistrationTest extends InviteTestCase
         self::assertInstanceOf(Registration::class, app(RegisterService::class));
         self::assertFileExists(public_path('plugins/friend_invite/console.html'));
     }
+    public function testInvitationNoteBecomesNativeUserRemarkAndCannotBeOverriddenByApplicant(): void
+    {
+        $p = $this->invite('month', ['note' => '  小林 · 同学  ']);
+        $r = $this->register($p, 'friend@example.test', ['remarks' => '申请人篡改', 'note' => '伪造姓名']);
+        self::assertTrue($r[0]);
+        self::assertSame('小林 · 同学', $r[1]->fresh()->remarks);
+        $r[1]->remarks = '管理员之后修改';
+        $r[1]->save();
+        self::assertFalse($this->register($p, 'second@example.test')[0]);
+        self::assertSame('管理员之后修改', $r[1]->fresh()->remarks);
+    }
+    public function testBlankInvitationNoteKeepsUserRemarksUntouched(): void
+    {
+        $r = $this->register($this->invite('month', ['note' => '  ']));
+        self::assertTrue($r[0]);
+        self::assertNull($r[1]->fresh()->remarks);
+    }
+    public function testExistingRegistrationRemarkIsPreservedAndNameAppended(): void
+    {
+        User::creating(function ($user) {
+            $user->remarks = '原有管理备注';
+        });
+        $r = $this->register($this->invite('year', ['note' => '小林']));
+        self::assertTrue($r[0]);
+        self::assertSame("原有管理备注\n小林", $r[1]->fresh()->remarks);
+    }
+    public function testRemarkWriteFailureRollsBackUserAndLeavesInviteUnclaimed(): void
+    {
+        $p = $this->invite('month', ['note' => '小林']);
+        User::saving(function ($user) {
+            if ($user->remarks === '小林') {
+                throw new RuntimeException('synthetic remark write failure');
+            }
+        });
+        self::assertFalse($this->register($p)[0]);
+        self::assertSame(1, User::count());
+        self::assertNull(Invitations::table()->where('id', $p['id'])->value('used_by'));
+        self::assertFalse(InviteCode::first()->status);
+    }
     public function testFiveDurationsAndCalendarEdges(): void
     {
         $now = Carbon\CarbonImmutable::parse('2028-01-31 12:00:00', 'UTC');

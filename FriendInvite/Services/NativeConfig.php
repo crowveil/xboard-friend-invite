@@ -33,13 +33,16 @@ final class NativeConfig extends PluginConfigService
 
     public function updateConfig(string $code, array $config): bool
     {
-        return DB::transaction(function () use ($code, $config) {
+        if ($code !== Settings::CODE) {
+            return $this->inner->updateConfig($code, $config);
+        }
+        return ConsoleAccess::serialize(fn () => DB::transaction(function () use ($code, $config) {
             $ok = $this->inner->updateConfig($code, $config);
             if ($ok && $code === Settings::CODE && Settings::enabled()) {
-                ConsoleAccess::change(filter_var($config['console_open'] ?? false, FILTER_VALIDATE_BOOLEAN));
+                ConsoleAccess::setOpen(filter_var($config['console_open'] ?? false, FILTER_VALIDATE_BOOLEAN));
             }
             return $ok;
-        });
+        }));
     }
 
     public function getDbConfig(string $code): array

@@ -81,9 +81,10 @@ final class TelegramTest extends InviteTestCase
     {
         $this->bot();
         ConsoleAccess::close();
-        $this->update(1, '/new 小林');
+        $this->update(0, '/new');
+        $this->update(1, '小林');
         $m = $this->messages();
-        $choose = $m[0]['data']['reply_markup']['inline_keyboard'][0][0]['callback_data'];
+        $choose = $m[1]['data']['reply_markup']['inline_keyboard'][0][0]['callback_data'];
         $draft = explode(':', $choose)[1];
         $this->update(2, $choose, true);
         $messages = $this->messages();
@@ -95,11 +96,99 @@ final class TelegramTest extends InviteTestCase
         $this->update(4, 'make:'.$draft, true);
         $this->update(5, 'make:'.$draft, true);
         self::assertSame(1, Invitations::table()->count());
+        self::assertSame('小林', Invitations::present(Invitations::table()->first())['note']);
+        $registered = $this->register(Invitations::present(Invitations::table()->first()));
+        self::assertTrue($registered[0]);
+        self::assertSame('小林', $registered[1]->fresh()->remarks);
         self::assertSame('year', Invitations::table()->first()->duration);
         $this->update(6, 't:'.$draft.':forever', true);
         self::assertSame('year', Invitations::table()->first()->duration);
         $messages = $this->messages();
         self::assertTrue((bool)array_filter($messages, fn ($p) => str_contains($p['data']['text'] ?? '', "小林\n")));
+    }
+    private function activeDraft(): string
+    {
+        return Store::read('draft:active:12345')['draft_id'];
+    }
+    public function testNewPromptsForRequiredNoteAndInvalidInputCannotAdvance(): void
+    {
+        $this->bot();
+        $this->update(1, '/new');
+        $draft = $this->activeDraft();
+        self::assertSame('', Store::read('draft:'.$draft)['note']);
+        self::assertStringContainsString('必填', $this->messages()[0]['data']['text']);
+        $this->update(2, 'p:'.$draft.':1', true);
+        self::assertArrayNotHasKey('plan_id', Store::read('draft:'.$draft));
+        $this->update(3, '   ');
+        $this->update(4, str_repeat('林', 121));
+        $this->update(5, "小林\n同学");
+        self::assertSame('', Store::read('draft:'.$draft)['note']);
+        $this->update(6, 'new');
+        self::assertSame('new', Store::read('draft:'.$draft)['note']);
+        $this->update(6, 'new');
+        $this->update(7, '修改备注');
+        self::assertSame('new', Store::read('draft:'.$draft)['note']);
+        self::assertSame(0, Invitations::table()->count());
+    }
+    public function testCancelRestartAndOldCancelButtonCannotAffectNewDraft(): void
+    {
+        $this->bot();
+        $this->update(1, 'new', true);
+        $first = $this->activeDraft();
+        $this->update(2, '/new');
+        $second = $this->activeDraft();
+        self::assertNotSame($first, $second);
+        self::assertSame(0, Store::read('draft:'.$first)['expires_at']);
+        $this->update(3, 'cancel:'.$first, true);
+        self::assertSame($second, $this->activeDraft());
+        $this->update(4, '/cancel');
+        self::assertSame([], Store::read('draft:active:12345'));
+        $this->update(5, '小林');
+        self::assertSame('', Store::read('draft:'.$second)['note']);
+        self::assertSame(0, Invitations::table()->count());
+    }
+    public function testWaitingNoteIsOwnerScopedAndExpires(): void
+    {
+        $this->bot();
+        $this->update(1, '/new');
+        $draft = $this->activeDraft();
+        $this->update(2, '入侵备注', false, '99999');
+        self::assertSame('', Store::read('draft:'.$draft)['note']);
+        $d = Store::read('draft:'.$draft);
+        $d['expires_at'] = time() - 1;
+        Store::put('draft:'.$draft, $d);
+        $this->update(3, '迟到备注');
+        self::assertSame('', Store::read('draft:'.$draft)['note']);
+        $this->update(4, '/new');
+        $new = $this->activeDraft();
+        Telegram::unpair();
+        $state = Store::read('bot');
+        Store::put('bot', array_replace($state, ['owner_id' => '12345', 'admin_id' => 1]));
+        $this->update(5, '重新绑定后输入');
+        self::assertSame('', Store::read('draft:'.$new)['note']);
+    }
+    public function testCommandsAreNotStoredAsNameAndCancelWorksAfterPlanSelection(): void
+    {
+        $this->bot();
+        $this->update(1, '/new');
+        $draft = $this->activeDraft();
+        $this->update(2, '/help');
+        $this->update(3, '/list');
+        self::assertSame('', Store::read('draft:'.$draft)['note']);
+        $this->update(4, '小林');
+        $this->update(5, 'p:'.$draft.':1', true);
+        $this->update(6, 't:'.$draft.':month', true);
+        $this->update(7, '/cancel');
+        $this->update(8, 'make:'.$draft, true);
+        self::assertSame(0, Invitations::table()->count());
+    }
+    public function testNonemptyShortcutRemainsSupported(): void
+    {
+        $this->bot();
+        $this->update(1, '/new 小林');
+        $draft = $this->activeDraft();
+        self::assertSame('小林', Store::read('draft:'.$draft)['note']);
+        self::assertStringContainsString('请选择赠送套餐', $this->messages()[0]['data']['text']);
     }
     public function testWrongWebhookSecretNeverCreatesAnything(): void
     {

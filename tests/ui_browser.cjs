@@ -36,7 +36,7 @@ const { chromium } = require('playwright');
         if (name === 'session')
           data = {
             access: { open, expires_at: Date.now() / 1000 + 3600 },
-            version: '0.1.0',
+            version: '0.1.1',
             summary: {
               invitations: 0,
               accepting: true,
@@ -45,6 +45,7 @@ const { chromium } = require('playwright');
           };
         if (name === 'state')
           data = {
+            revision: 'a'.repeat(64),
             access: { open, expires_at: Date.now() / 1000 + 3600 },
             config: {
               accepting: true,

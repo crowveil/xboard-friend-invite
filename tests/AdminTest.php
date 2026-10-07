@@ -23,10 +23,10 @@ final class AdminTest extends InviteTestCase
         ConsoleAccess::change(true);
         foreach ([null,User::create(['email' => 'ordinary@example.test'])] as $user) {
             app('auth')->admin = $user;
-            foreach (['session','state','export'] as $path) {
+            foreach (['session','state','export','preflight'] as $path) {
                 self::assertSame(403, $this->route('admin/'.$path)->getStatusCode(), $path);
             }
-            foreach (['settings','create','revoke','close','renew','debug','telegram/connect','telegram/pair','telegram/unpair','telegram/disconnect'] as $path) {
+            foreach (['settings','create','revoke','close','renew','debug','telegram/connect','telegram/pair','telegram/unpair','telegram/disconnect','telegram/recover','telegram/forget','messages'] as $path) {
                 self::assertSame(403, $this->route('admin/'.$path, [])->getStatusCode(), $path);
             }
         }
@@ -62,7 +62,7 @@ final class AdminTest extends InviteTestCase
     {
         ConsoleAccess::change(true);
         $GLOBALS['test_settings']['invite_force'] = false;
-        $r = $this->route('admin/settings', ['accepting' => true,'plan_ids' => [1],'invite_days' => 7,'register_url' => 'https://panel.example.test/#/register?code={code}']);
+        $r = $this->route('admin/settings', ['revision' => Settings::revision(), 'accepting' => true,'plan_ids' => [1],'invite_days' => 7,'register_url' => 'https://panel.example.test/#/register?code={code}']);
         self::assertSame(422, $r->getStatusCode());
         self::assertFalse(admin_setting('invite_force'));
     }
@@ -89,7 +89,7 @@ final class AdminTest extends InviteTestCase
     public function testPausedInvitesAllowEmptyPlanSelection(): void
     {
         ConsoleAccess::change(true);
-        $r = $this->route('admin/settings', ['accepting' => false,'plan_ids' => [],'invite_days' => 7,'register_url' => 'https://panel.example.test/#/register?code={code}']);
+        $r = $this->route('admin/settings', ['revision' => Settings::revision(), 'accepting' => false,'plan_ids' => [],'invite_days' => 7,'register_url' => 'https://panel.example.test/#/register?code={code}']);
         self::assertSame(200, $r->getStatusCode(), $r->getContent());
         self::assertSame([], Settings::get()['plan_ids']);
     }

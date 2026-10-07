@@ -48,7 +48,10 @@
               <label>赠送套餐<select id="plan" required></select></label
               ><label>使用期限<select id="duration" required></select></label
               ><label
-                >朋友备注（选填）<input id="note" maxlength="120" placeholder="例如：小林" /></label
+                >姓名／备注（选填，领取后写入用户备注）<input
+                  id="note"
+                  maxlength="120"
+                  placeholder="例如：小林" /></label
               ><label
                 >邀请有效期（天）<input
                   id="invite-days"
@@ -111,7 +114,8 @@
               自动使用站点地址，保留
               {code}。自定义主题可改成其支持的邀请码链接；朋友仍在原有注册页面填写邮箱和密码。
             </p>
-            <button class="primary" type="submit">保存设置</button>
+            <button class="primary" type="submit">保存设置</button
+            ><button type="button" id="settings-reload">重新加载设置</button>
           </form>
         </section>
         <section id="tab-telegram" class="card" hidden>
@@ -121,7 +125,9 @@
             HTTPS，服务器能够访问 Telegram。
           </p>
           <p id="bot-status"></p>
-          <button id="bot-refresh">刷新连接状态</button>
+          <button id="bot-refresh">刷新连接状态</button
+          ><button id="bot-recover" hidden>恢复连接操作</button
+          ><button id="bot-forget" class="danger" hidden>清除本地连接</button>
           <form id="bot-form">
             <label
               >Bot Token<input
@@ -147,8 +153,8 @@
             ><button id="copy-pair">复制指令</button>
           </div>
           <p class="hint">
-            绑定完成后发送 /new，按按钮选择套餐 → 期限 → 确认生成。/new 备注 可记下朋友名字，/list
-            查看和撤销最近邀请。仅绑定账号的私聊可操作；关闭此控制台不会停止机器人。
+            绑定完成后发送 /new，按提示输入必填备注 → 选择套餐 → 期限 → 确认生成。/cancel
+            可取消，/list 查看和撤销最近邀请。仅绑定账号的私聊可操作；关闭此控制台不会停止机器人。
           </p>
         </section>
         <section id="tab-debug" class="card" hidden>
@@ -157,13 +163,25 @@
           <p id="debug-status"></p>
           <div class="actions">
             <button id="debug-on">开启调试 60 分钟</button><button id="debug-off">关闭调试</button
-            ><button id="export">导出脱敏诊断</button>
+            ><button id="export">导出脱敏诊断</button><button id="preflight">部署自检</button
+            ><button id="message-list">失败消息</button>
           </div>
           <pre id="diagnostics"></pre>
+          <div id="messages"></div>
         </section>
       </div>
+      <section id="close-dialog" class="card" role="dialog" aria-labelledby="close-title" hidden>
+        <h2 id="close-title">关闭管理控制台</h2>
+        <p>
+          有尚未保存的设置或 Token 输入。保存并关闭只保存邀请设置；Token 请先在 Telegram
+          页完成连接，或选择放弃。
+        </p>
+        <button id="close-save">保存并关闭</button
+        ><button id="close-discard" class="danger">放弃并关闭</button
+        ><button id="close-cancel">继续编辑</button>
+      </section>
       <footer>好友邀请 · 独立 XBoard 插件 <span id="footer-version"></span></footer>
     </main>
-    <script src="console.js?v=485ce19199ca"></script>
+    <script src="console.js?v=8df1dd0c065f"></script>
   </body>
 </html>

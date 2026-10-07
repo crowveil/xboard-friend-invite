@@ -69,6 +69,11 @@ final class Registration extends RegisterService
                 $user->expired_at = Duration::expires($invite->duration);
                 $user->u = 0;
                 $user->d = 0;
+                $note = trim((string) ($detail['note'] ?? ''));
+                if ($note !== '') {
+                    $existing = (string) ($user->remarks ?? '');
+                    $user->remarks = trim($existing) === '' ? $note : rtrim($existing)."\n".$note;
+                }
                 $user->saveOrFail();
                 $phase = 'claim_invitation';
                 InviteCode::where('id', $invite->native_id)->update(['status' => InviteCode::STATUS_USED]);
